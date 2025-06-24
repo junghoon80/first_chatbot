@@ -1,13 +1,14 @@
 import streamlit as st
 import google.generativeai as genai
 import requests
+import datetime
 
 # 비밀키 불러오기
-gemini_api_key = st.secrets["GEMINI_API_KEY"]
-google_api_key = st.secrets["GOOGLE_API_KEY"]
-google_cse_id = st.secrets["GOOGLE_CSE_ID"]
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+GOOGLE_CSE_ID = st.secrets["GOOGLE_CSE_ID"]
 
-genai.configure(api_key=gemini_api_key)
+genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 def google_search(query, api_key, cse_id, num=3):
@@ -19,8 +20,8 @@ def google_search(query, api_key, cse_id, num=3):
         "num": num,
         "hl": "ko"
     }
-    resp = requests.get(url, params=params)
-    data = resp.json()
+    response = requests.get(url, params=params)
+    data = response.json()
     if "items" not in data:
         return "검색 결과가 없습니다."
     results = []
@@ -34,7 +35,7 @@ def google_search(query, api_key, cse_id, num=3):
 if "history" not in st.session_state:
     st.session_state.history = []
 if "web_search_enabled" not in st.session_state:
-    st.session_state.web_search_enabled = False
+    st.session_state.web_search_enabled = True
 
 with st.sidebar:
     st.header("웹 검색 설정")
@@ -43,7 +44,10 @@ with st.sidebar:
     if st.button("대화 기록 초기화"):
         st.session_state.history = []
 
-st.title("🔎 Google Custom Search + Gemini 2.5 Flash 챗봇")
+# 오늘 날짜 정보
+current_date = datetime.date.today().strftime("%Y년 %m월 %d일")
+
+st.title(f"🔎 Google Custom Search + Gemini 2.5 Flash 챗봇 ({current_date})")
 
 # 대화 기록 표시
 for role, msg in st.session_state.history:
@@ -60,7 +64,7 @@ if user_input:
     if st.session_state.web_search_enabled:
         with st.spinner("Google에서 검색 중..."):
             search_results = google_search(
-                user_input, google_api_key, google_cse_id, num=num_results
+                user_input, GOOGLE_API_KEY, GOOGLE_CSE_ID, num=num_results
             )
             st.session_state.history.append(("system", f"🔍 검색 결과:\n{search_results}"))
             with st.chat_message("system"):
@@ -69,12 +73,14 @@ if user_input:
     with st.chat_message("assistant"):
         with st.spinner("Gemini가 답변 중..."):
             try:
-                # Gemini API 요구 포맷에 맞게 대화 기록 변환
                 chat_history = [
                     {"role": "user" if role == "user" else "model", "parts": [msg]}
                     for role, msg in st.session_state.history
                 ]
-                context = f"최신 웹 검색 결과:\n{search_results}\n\n" if search_results else ""
+                # 오늘 날짜와 검색 결과를 컨텍스트에 포함
+                context = f"오늘 날짜는 {current_date}입니다.\n"
+                if search_results:
+                    context += f"최신 웹 검색 결과:\n{search_results}\n\n"
                 convo = model.start_chat(history=chat_history)
                 response = convo.send_message(f"{context}사용자 질문: {user_input}")
                 ai_response = response.text
